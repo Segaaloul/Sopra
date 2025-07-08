@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Configuration
+USER="selim"
+PROM_PATH="/home/$USER/prometheus-2.52.0.linux-arm64"
+NODE_PATH="/home/$USER/node_exporter-1.8.0.linux-arm64"
+
+# Service Prometheus
+echo "Creating Prometheus service..."
+sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOF
+[Unit]
+Description=Prometheus Monitoring
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=$USER
+ExecStart=$PROM_PATH/prometheus \\
+  --config.file=$PROM_PATH/prometheus.yml \\
+  --storage.tsdb.path=$PROM_PATH/data
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Service Node Exporter
+echo "Creating Node Exporter service..."
+sudo tee /etc/systemd/system/node_exporter.service > /dev/null <<EOF
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=$USER
+ExecStart=$NODE_PATH/node_exporter
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd and enable services
+echo "Reloading systemd and enabling services..."
+sudo systemctl daemon-reload
+sudo systemctl enable prometheus
+sudo systemctl enable node_exporter
+
+# Start services
+echo "Starting services..."
+sudo systemctl start prometheus
+sudo systemctl start node_exporter
+
+echo "✅ All done! You can check with: systemctl status prometheus && systemctl status node_exporter"
