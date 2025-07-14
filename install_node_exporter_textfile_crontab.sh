@@ -15,7 +15,7 @@ if [ -z "$1" ]; then
 fi
 
 USERNAME="$1"
-INSTALL_DIR="/home/${USERNAME}"
+INSTALL_DIR="/home/${USERNAME}/monitoring"
 NODE_EXPORTER_BIN="${INSTALL_DIR}/node_exporter"
 LOG_FILE="/tmp/node_exporter.log"
 TEXTFILE_DIR="${INSTALL_DIR}/node_exporter_textfiles"
