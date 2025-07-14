@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#creating service for prometheus and node exporter
 # Configuration
 USER="selim"
 PROM_PATH="/home/$USER/prometheus-2.52.0.linux-arm64"

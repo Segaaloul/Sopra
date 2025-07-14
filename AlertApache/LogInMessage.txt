@@ -1,0 +1,143 @@
+Grafana (VM A)
+    │
+    │  🔔 Alerte Prometheus (apache_up == 0)
+    │
+    ▼
+Webhook HTTP (→ VM B :5001)
+    │
+    ▼
+Serveur Flask (webhook_server.py)
+    │
+    ▼
+Script shell (send_apache_log_to_teams.sh)
+    │
+    ▼
+Microsoft Teams (via Webhook Teams)
+
+
+
+📂 Fichiers utilisés
+1. send_apache_log_to_teams.sh
+📍 Chemin : /home/selim/send_apache_log_to_teams.sh
+🔒 Donne les droits d’exécution : chmod +x
+
+#!/bin/bash
+
+# ✅ Paramètres
+WEBHOOK_URL="https://steria.webhook.office.com/webhookb2/a10b2272-9e0a-4567-839a-304f461a9115@8b87af7d-8647-4dc7-8df4-5f69a2011bb5/IncomingWebhook/e1e6d96f4dcc43ce9321246a3af030f1/a563a265-5ae9-4c6c-a8d4-4fa4d176e600/V2SwaxA0aRmbCrWzt-wnG5FYx-K1_ErhCS2QrAbysb8NA1"
+LOG_FILE="/var/log/apache2/error.log"
+HOSTNAME=$(hostname)
+
+# ✅ On récupère les 20 dernières lignes de log
+LOG=$(tail -n 20 "$LOG_FILE" | sed 's/"/\\"/g')
+
+# ✅ On formate le message JSON pour Teams
+MESSAGE="🚨 *Apache est DOWN sur le Serveur Sopra *
+
+Dernières lignes de /var/log/apache2/error.log :
+\`\`\`
+$LOG
+\`\`\`"
+
+# ✅ Envoi à Teams via curl
+curl -s -H "Content-Type: application/json" -X POST -d "{
+  \"text\": \"$MESSAGE\"
+}" "$WEBHOOK_URL"
+
+
+# ✅ Envoi à Teams via Webhook
+curl -s -H "Content-Type: application/json" -X POST -d "{
+  \"text\": \"$MESSAGE\"
+}" "$WEBHOOK_URL"
+2. webhook_server.py
+📍 Chemin : /bin/webhook_server.py
+💡 Sert à recevoir l'alerte de Grafana via un webhook HTTP et déclencher le script.
+
+
+from flask import Flask, request
+import subprocess
+
+app = Flask(__name__)
+
+@app.route("/alert", methods=["POST"])
+def alert():
+    data = request.json
+    print("Alerte reçue ! Données :")
+    print(data)
+    subprocess.Popen(["/home/selim/send_apache_log_to_teams.sh"])
+    return "OK", 200
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001)
+
+
+
+
+📌 Configurations à retenir
+
+Dans Grafana-----
+Contact Point : Webhook HTTP
+
+URL : http://<IP_VM_B>:5001/alert
+
+Content-Type : application/json
+
+Rule d’alerte :
+
+Condition : apache_up == 0
+
+Attachée à ce Contact Point
+
+🔐 Droits et sécurité
+Le fichier /var/log/apache2/error.log doit être lisible : 
+sudo chmod o+r /var/log/apache2/error.log
+
+
+Résultat final
+Lorsque le service Apache est down sur VM B :
+
+Prometheus détecte que apache_up == 0
+
+Grafana envoie une alerte à http://VM-B:5001/alert
+
+Flask reçoit l’alerte, exécute send_apache_log_to_teams.sh
+
+Le script lit les logs Apache et envoie un message enrichi sur Teams avec 🔥 les logs inclus
+
+
+
+
+NB-----------------------------
+
+dans la vm B jai installer pip pour ensuite installer flask
+
+
+
+
+Amelioration
+
+Jai cree un service pour flask , dans la vm B afin quil demarre automatiquement en tant que service
+
+voici comment jai fais:
+--- dans la vm B  ---
+sudo nano /etc/systemd/system/flask_webhook.service
+
+
+[Unit]
+Description=Flask Webhook Server for Grafana Alerts
+After=network.target
+
+[Service]
+User=selim
+WorkingDirectory=/bin
+ExecStart=/usr/bin/python3 /bin/webhook_server.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable flask_webhook.service
+sudo systemctl start flask_webhook.service
