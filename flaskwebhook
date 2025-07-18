@@ -1,0 +1,74 @@
+from flask import Flask, request, jsonify
+import requests
+from collections import deque
+
+app = Flask(__name__)
+
+OLLAMA_API = "http://192.168.64.156:11434/api/generate"
+TEAMS_WEBHOOK = "https://steria.webhook.office.com/webhookb2/a10b2272-9e0a-4567-839a-304f461a9115@8b87af7d-8647-4dc7-8df4-5f69a2011bb5/IncomingWebhook/e1e6d96f4dcc43ce9321246a3af030f1/a563a265-5ae9-4c6c-a8d4-4fa4d176e600/V2SwaxA0aRmbCrWzt-wnG5FYx-K1_ErhCS2QrAbysb8NA1"
+LOG_FILE = "/var/log/mysql/myerror.log"
+
+def tail_log(filepath, lines=5):
+    try:
+        with open(filepath, 'r') as f:
+            return ''.join(deque(f, lines))
+    except Exception as e:
+        return f"Error reading log file: {e}"
+
+def query_phi(log_text):
+    payload = {
+        "model": "gemma:2b",
+        "prompt": f"You're a Linux log analysis expert. From the following log:\n{log_text}\nDetect errors/warnings, summarize each of them in bullet points and explain me",
+        "stream": False
+    }
+    try:
+        resp = requests.post(OLLAMA_API, json=payload, timeout=60)
+        resp.raise_for_status()
+        ai_response = resp.json().get("response", "No response from model.")
+        # Ajouter la signature au début
+        final_message = f"Ce message provient de votre assistant IA.\n\n{ai_response.strip()}"
+        return final_message
+    except Exception as e:
+        print(f"Error querying Ollama API: {e}")
+        return f"Could not get AI response. Here is the raw log instead:\n\n{log_text}"
+
+def send_to_teams(message):
+    data = {
+        "@type": "MessageCard",
+        "@context": "https://schema.org/extensions",
+        "summary": "Notification de l'assistant IA",
+        "themeColor": "0076D7",
+        "title": "🤖 Rapport de votre assistant IA",
+        "sections": [
+            {
+                "activityTitle": "Analyse des logs",
+                "text": message.replace('\n', '<br>'),
+                "images": [
+                    {
+                        "image": "https://upload.wikimedia.org/wikipedia/commons/9/99/OOjs_UI_icon_robot.svg",
+                        "title": "Assistant IA"
+                    }
+                ]
+            },
+            {
+                "images": [
+                    {
+                        "image": "https://i.postimg.cc/fTDHd11j/1000-F-588953042-01-Hrsog5-Ou-Zob-Kd-MXf9-GVp-B6e6-Xi-Ih-Ba-removebg-preview.png",
+                        "title": "Image en bas"
+                    }
+                ]
+            }
+        ]
+    }
+    resp = requests.post(TEAMS_WEBHOOK, json=data)
+    return resp.status_code
+
+@app.route("/grafana-webhook", methods=["POST"])
+def grafana_webhook():
+    log_excerpt = tail_log(LOG_FILE, 10)
+    response_text = query_phi(log_excerpt)
+    send_to_teams(response_text)
+    return jsonify({"status": "ok", "response": response_text})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
