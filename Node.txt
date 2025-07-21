@@ -2,3 +2,6 @@
 
 # Pour telecharger directement depuis github
 wget https://raw.githubusercontent.com/Segaaloul/Monitoring-Prometheus-Grafana/main/checked-node/mise_en_place_node.sh
+
+#pour mise 2.0
+wget https://raw.githubusercontent.com/Segaaloul/Monitoring-Prometheus-Grafana/main/checked-node/mise_en_place_node2.0.sh
